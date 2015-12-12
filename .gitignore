@@ -1,0 +1,6 @@
+*.sdf
+*.opensdf
+Debug/*.*
+Debug/
+GPUOpticalFlow/Debug/*.*
+GPUOpticalFlow/Debug/GPUOpticalFlow.tlog/*.*
