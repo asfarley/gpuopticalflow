@@ -3,6 +3,9 @@
 #include "device_launch_parameters.h"
 #include <stdio.h>
 
+const int BLOCK_WIDTH = 20;
+const int MAX_SHIFT = 15;
+
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
 __global__ void addKernel(int *c, const int *a, const int *b)
@@ -11,19 +14,43 @@ __global__ void addKernel(int *c, const int *a, const int *b)
     c[i] = a[i] + b[i];
 }
 
-__global__ void opticalFlowKernel(int *c, const int *a, const int *b)
+//Find maximum match value at a specified pixel for all possible shifts 
+__global__ void opticalFlowPixelKernel(int *frame1[640][480], int *frame2[640][480], int x, int y, int *flow[640][480][2])
 {
-	int i = threadIdx.x;
-	c[i] = a[i] + b[i];
+	
+	
+}
+
+//Calculate match value for a fixed x,y location and shift value
+__global__ void matchPixelKernel(int *frame1[640][480], int *frame2[640][480], int x, int y, int dx, int dy, int *match)
+{
+	int x_start = x - BLOCK_WIDTH / 2;
+	int y_start = y - BLOCK_WIDTH / 2;
+	int x_end = x_start + BLOCK_WIDTH;
+	int y_end = y_start + BLOCK_WIDTH;
+
+	for (int i = x_start; i < x_end; i++)
+		for (int j = y_start; j < y_end; j++)
+		{
+
+		}
+
 }
 
 int main()
 {
 	CImage frame1;
 	CImage frame2;
+	CImage flow = CImage();
+	
 	//Code to load/create image goes here
 	frame1.Load(_T("C:\\images\\frame1.png"));
 	frame2.Load(_T("C:\\images\\frame2.png"));
+
+	const int WIDTH = frame1.GetWidth();
+	const int HEIGHT = frame1.GetHeight();
+
+	flow.Create(WIDTH, HEIGHT, 24); //May want to check return value (0 -> success)
 
 	// 
     const int arraySize = 5;
@@ -40,6 +67,9 @@ int main()
 
     printf("{1,2,3,4,5} + {10,20,30,40,50} = {%d,%d,%d,%d,%d}\n",
         c[0], c[1], c[2], c[3], c[4]);
+
+
+	flow.Save(_T("C:\\images\\opticalflow.png"));
 
     // cudaDeviceReset must be called before exiting in order for profiling and
     // tracing tools such as Nsight and Visual Profiler to show complete traces.
