@@ -15,6 +15,7 @@ Usage example:
 * Build solution in Visual Studio
 * Run the following command:
 
-      >> GPUOpticalFlow.exe 19 6 "frame1.png" "frame2.png"
+
+    >> GPUOpticalFlow.exe 19 6 "frame1.png" "frame2.png"
 	
 Output: ``opticalflow.png``
