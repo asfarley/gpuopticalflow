@@ -1,13 +1,12 @@
 GPUOpticalFlow
 ===========
 
-A CUDA-based .dll for calculating optical flow on video frames. 
+A CUDA-based .exe for calculating optical flow on video frames. 
 
-Exported functions:
+    >> GPUOpticalFlow.exe MAXFLOW APERTURE Frame1Path Frame2Path
 
-    void GPUOpticalFlow(*int[][] frame1, *int[][] frame2, *int[][][] opticalFlowOut, int WIDTH, int HEIGHT, int APERTURE, int MAXFLOW)
+* ``MAXFLOW``: Maximum tested flow value
+* ``APERTURE``: Size of window used to compute match
+* ``Frame1Path``, ``Frame2Path``: sequential 640 x 480 .png images
 
-* **frame1**, **frame2**: sequential greyscale video image frames. Dimensions: int[WIDTH][HEIGHT]
-* **opticalFlowOut**: return value. Dimensions: int[WIDTH][HEIGHT][2]
-* **APERTURE**: Size of window used to compute match
-* **MAXFLOW**: Maximum tested flow value
+Output: opticalflow.png
