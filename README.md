@@ -11,12 +11,9 @@ A CUDA-based .exe for calculating optical flow on video frames.
 
 Usage example:
 
-1. Copy "frame1.png" and "frame2.png" to \Debug folder
-2. Build solution in Visual Studio
-3. Run the following command:
-
-
-
+* Copy "frame1.png" and "frame2.png" to \Debug folder
+* Build solution in Visual Studio
+* Run the following command:
 
     >> GPUOpticalFlow.exe 19 6 "frame1.png" "frame2.png"
 	
