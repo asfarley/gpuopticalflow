@@ -24,6 +24,6 @@ Usage example:
 	
 Output: ``opticalflow.png``
 
-<img src="https://github.com/asfarley/gpuopticalflow/blob/master/frame1.png?raw=true"/>
-<img src="https://github.com/asfarley/gpuopticalflow/blob/master/frame2.png?raw=true"/>
-<img src="https://github.com/asfarley/gpuopticalflow/blob/master/opticalflow.png?raw=true"/>
+<img src="https://github.com/asfarley/gpuopticalflow/blob/master/frame1.png?raw=true" style="width: 100px;"/>
+<img src="https://github.com/asfarley/gpuopticalflow/blob/master/frame2.png?raw=true" style="width: 100px;"/>
+<img src="https://github.com/asfarley/gpuopticalflow/blob/master/opticalflow.png?raw=true" style="width: 100px;"/>
