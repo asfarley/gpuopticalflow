@@ -12,15 +12,22 @@
 #define DEBUG false
 #define RENDER_GAIN 20
 #define ZERO_PRIOR 1000
+#define RESOLUTION 6
 
  void renderOpticalFlow(int flow[WIDTH * HEIGHT * 2], CImage *image)
 {
 	for (int i = 0; i < WIDTH; i++)
 		for (int j = 0; j < HEIGHT; j++)
 		{
+			int i_index = i - (i % RESOLUTION);
+			int j_index = j - (j % RESOLUTION);
+			int vx_index = (i_index * HEIGHT * 2) + (j_index * 2) + 0;
+			int vy_index = (i_index * HEIGHT * 2) + (j_index * 2) + 1;
+			
 			byte r = 0;
-			byte g = (byte) abs(RENDER_GAIN * flow[(i * HEIGHT * 2) + (j * 2) + 1]);
-			byte b = (byte) abs(RENDER_GAIN * flow[(i * HEIGHT * 2) + (j * 2) + 0]);
+			byte g = (byte) abs(RENDER_GAIN * flow[vy_index]);
+			byte b = (byte) abs(RENDER_GAIN * flow[vx_index]);
+
 			COLORREF color = RGB(r,g,b);
 			(*image).SetPixel(i, j, color);
 		}
@@ -65,8 +72,8 @@ __device__ void sumSquareErrorOffsetKernel(int frame1[WIDTH * HEIGHT], int frame
 //Find maximum match value at a specified pixel for all possible shifts 
 __global__ void opticalFlowPixelKernel(int frame1[WIDTH * HEIGHT], int frame2[WIDTH * HEIGHT], int flow[WIDTH * HEIGHT * 2], int *max_shift, int *block_width)
 {
-	int y = blockIdx.y * blockDim.y + threadIdx.y;
-	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = RESOLUTION * (blockIdx.y * blockDim.y + threadIdx.y);
+	int x = RESOLUTION * (blockIdx.x * blockDim.x + threadIdx.x);
 	int best_dx=0;
 	int best_dy=0;
 	int best_match = INT_MAX;
@@ -176,8 +183,14 @@ __global__ void opticalFlowPixelKernel(int frame1[WIDTH * HEIGHT], int frame2[WI
 		 goto Error;
 	 }
 
+	 cudaEvent_t start, stop;
+	 cudaEventCreate(&start);
+	 cudaEventCreate(&stop);
+	 cudaEventRecord(start);
+
 	 // Launch a kernel on the GPU with one thread for each element.
 	 opticalFlowPixelKernel<<< dimGrid, dimBlock >>>(frame1_in, frame2_in, flow_out, max_shift_in, block_width_in);
+	 cudaEventRecord(stop);
 
 	 // Check for any errors launching the kernel
 	 cudaStatus = cudaGetLastError();
@@ -201,6 +214,12 @@ __global__ void opticalFlowPixelKernel(int frame1[WIDTH * HEIGHT], int frame2[WI
 		 fprintf(stderr, "cudaMemcpy failed!");
 		 goto Error;
 	 }
+
+	 cudaEventSynchronize(stop);
+	 float milliseconds = 0;
+	 cudaEventElapsedTime(&milliseconds, start, stop);
+	 printf("GPU time: %f ms \n", milliseconds);
+
 
  Error:
 	 cudaFree(frame1_in);
@@ -233,9 +252,19 @@ int main(int argc, char *argv[])
 	CImage frame1;
 	CImage frame2;
 	CImage flow = CImage();
-	
+
+	if (argc != 5)
+	{
+		printf("Wrong number of arguments - expected 4: MAX_SHIFT BLOCK_WIDTH \"Frame1Path\" \"Frame2Path\"");
+		return 1; //Code 1: Wrong parameters
+	}
+	int max_shift = atoi(argv[1]);
+	int block_width = atoi(argv[2]);
 	char* frame1_path = argv[3];
 	char* frame2_path = argv[4];
+
+	clock_t start = clock(), diff;
+
 	//Code to load/create image goes here
 	frame1.Load(_T(frame1_path));
 	frame2.Load(_T(frame2_path));
@@ -244,14 +273,6 @@ int main(int argc, char *argv[])
 
 	CImageToArray(frame1, frame1_array);
 	CImageToArray(frame2, frame2_array);
-
-	if (argc != 5)
-	{
-		printf("Wrong argument count - expected 4 (MAX_SHIFT BLOCK_WIDTH Frame1Path Frame2Path)");
-		return 1; //Code 1: Wrong parameters
-	}
-	int max_shift = atoi(argv[1]);
-	int block_width = atoi(argv[2]);
 
 	cudaError_t cudaStatus = opticalFlow(frame1_array, frame2_array, flow_array, max_shift, block_width);
 	if (cudaStatus != cudaSuccess) {
@@ -262,6 +283,10 @@ int main(int argc, char *argv[])
 	renderOpticalFlow(flow_array, &flow);
 
 	flow.Save(_T("opticalflow.png"));
+
+	diff = clock() - start;
+	int msec = diff * 1000 / CLOCKS_PER_SEC;
+	printf("Total time: %d seconds %d milliseconds", msec / 1000, msec % 1000);
 
     // cudaDeviceReset must be called before exiting in order for profiling and
     // tracing tools such as Nsight and Visual Profiler to show complete traces.
