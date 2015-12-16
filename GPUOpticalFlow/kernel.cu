@@ -43,7 +43,7 @@
  }
 
  //Calculate match value for a fixed x,y location and shift value
-__device__ void sumSquareErrorOffsetKernel(int frame1[WIDTH * HEIGHT], int frame2[WIDTH * HEIGHT], int x, int y, int dx, int dy, int *sse, int block_width)
+__device__ void sumSquareErrorOffset(int frame1[WIDTH * HEIGHT], int frame2[WIDTH * HEIGHT], int x, int y, int dx, int dy, int *sse, int block_width)
  {
 	 int x_start = x - block_width / 2;
 	 int y_start = y - block_width / 2;
@@ -69,6 +69,36 @@ __device__ void sumSquareErrorOffsetKernel(int frame1[WIDTH * HEIGHT], int frame
 	 *sse = sumSquareError;
  }
 
+//Calculate match value for a fixed x,y location and shift value
+__global__ void sumSquareErrorOffsetKernel(int frame1[WIDTH * HEIGHT], int frame2[WIDTH * HEIGHT], int x, int y, int *sse, int block_width, int max_shift)
+{
+	int dy = (blockIdx.y * blockDim.y + threadIdx.y) - max_shift;
+	int dx = (blockIdx.x * blockDim.x + threadIdx.x) - max_shift;
+	if (dx > max_shift || dy > max_shift) return;
+
+	int x_start = x - block_width / 2;
+	int y_start = y - block_width / 2;
+	int x_end = x_start + block_width;
+	int y_end = y_start + block_width;
+
+	threshold(&x, WIDTH);
+	threshold(&y, HEIGHT);
+
+	int sumSquareError = 0;
+	for (int i = x_start; i < x_end; i++)
+		for (int j = y_start; j < y_end; j++)
+		{
+			bool shifted_point_in_bounds = i + dx >= 0 && i + dx < WIDTH && j + dy >= 0 && j + dy < HEIGHT;
+			bool original_point_in_bounds = i >= 0 && i < WIDTH && j >= 0 && j < HEIGHT;
+			if (shifted_point_in_bounds && original_point_in_bounds)
+				sumSquareError += (frame1[i * HEIGHT + j] - frame2[(i + dx) * HEIGHT + j + dy])*(frame1[i * HEIGHT + j] - frame2[(i + dx) * HEIGHT + j + dy]);
+			else
+				sumSquareError += 3 * 255;
+		}
+
+	sse[(2 * max_shift*(dy + max_shift)) + dx + max_shift] = sumSquareError;
+}
+
 //Find maximum match value at a specified pixel for all possible shifts 
 __global__ void opticalFlowPixelKernel(int frame1[WIDTH * HEIGHT], int frame2[WIDTH * HEIGHT], int flow[WIDTH * HEIGHT * 2], int *max_shift, int *block_width)
 {
@@ -79,27 +109,39 @@ __global__ void opticalFlowPixelKernel(int frame1[WIDTH * HEIGHT], int frame2[WI
 	int best_match = INT_MAX;
 	if (x >= WIDTH || y >= HEIGHT) return;
 
+	int length = 4 * (*max_shift)*(*max_shift);
+	int sse[1600 * sizeof(int)];
+	for (int i = 0; i < length; i++)
+		sse[i] = INT_MAX;
+
+	dim3 dimBlock(4, 4);
+	dim3 dimGrid;
+	dimGrid.x = (2 * (*max_shift) + dimBlock.x - 1) / dimBlock.x;  /*< Greater than or equal to image width */
+	dimGrid.y = (2 * (*max_shift) + dimBlock.y - 1) / dimBlock.y; /*< Greater than or equal to image height */
+
+	sumSquareErrorOffsetKernel <<< dimBlock, dimGrid >>>(frame1, frame2, x, y, sse, (*block_width), (*max_shift));
+	
+	//Search SSE results array for best match
 	for (int dx = -(*max_shift); dx < (*max_shift); dx++)
 		for (int dy = -(*max_shift); dy < (*max_shift); dy++)
 		{
-			int sse = INT_MAX;
-
-			sumSquareErrorOffsetKernel(frame1, frame2, x, y, dx, dy, &sse, (*block_width));
-
+			int index = (2 * (*max_shift)*(dy + *max_shift)) + dx + *max_shift;
+			int thisDxDySSE = sse[index];
 			if (dx == 0)
-				sse -= ZERO_PRIOR;
+				thisDxDySSE -= ZERO_PRIOR;
 
 			if (dy == 0)
-				sse -= ZERO_PRIOR;
+				thisDxDySSE -= ZERO_PRIOR;
 
-			if (sse < best_match)
+			if (thisDxDySSE < best_match)
 			{
-				best_match = sse;
+				best_match = thisDxDySSE;
 				best_dx = dx;
 				best_dy = dy;
 			}
 		}
 
+	free(sse);
 	flow[(x * HEIGHT * 2) + (y * 2) + 0] = best_dx;
 	flow[(x * HEIGHT * 2) + (y * 2) + 1] = best_dy;
 }
@@ -115,7 +157,7 @@ __global__ void opticalFlowPixelKernel(int frame1[WIDTH * HEIGHT], int frame2[WI
 	 cudaError_t cudaStatus;
 	 int size = WIDTH * HEIGHT * sizeof(int);
 
-	 dim3 dimBlock(32, 32);
+	 dim3 dimBlock(4, 8);
 	 dim3 dimGrid;
 	 dimGrid.x = (WIDTH + dimBlock.x - 1) / dimBlock.x;  /*< Greater than or equal to image width */
 	 dimGrid.y = (HEIGHT + dimBlock.y - 1) / dimBlock.y; /*< Greater than or equal to image height */
@@ -286,7 +328,7 @@ int main(int argc, char *argv[])
 
 	diff = clock() - start;
 	int msec = diff * 1000 / CLOCKS_PER_SEC;
-	printf("Total time: %d seconds %d milliseconds", msec / 1000, msec % 1000);
+	printf("Total time: %d.%d s", msec / 1000, msec % 1000);
 
     // cudaDeviceReset must be called before exiting in order for profiling and
     // tracing tools such as Nsight and Visual Profiler to show complete traces.
